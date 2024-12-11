@@ -1,0 +1,31 @@
+# Ignore Visual Studio Code settings
+.vscode/
+
+# Ignore CUDA binaries and intermediate files
+*.cu
+*.ptx
+*.cubin
+*.fatbin
+
+# Ignore C++ build files
+*.o
+*.obj
+*.exe
+*.out
+*.a
+*.lib
+*.dll
+*.so
+*.dylib
+*.exe
+*.pdb
+*.ilk
+*.idb
+*.ipdb
+*.iobj
+*.rsp
+*.tlog
+*.log
+*.d
+*.dSYM/
+*.stackdump
