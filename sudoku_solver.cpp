@@ -9,7 +9,7 @@
 
 #define SIZE 9
 #define EMPTY 0
-#define MAX_SOLUTIONS 1000000 // Adjust as needed
+#define MAX_SOLUTIONS 1000000
 
 // Function to check if placing 'num' at (row, col) is valid
 bool is_valid(const std::vector<int>& board, int row, int col, int num) {
@@ -89,12 +89,19 @@ void solve_board_thread(std::vector<int> board, BoardResult &result) {
 
 int main(int argc, char* argv[]) {
     bool use_threads = false;
-    // Check command-line arguments for --threads or -t
+    bool save_output = false;
+
+    // Parse arguments
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
         if (arg == "--threads" || arg == "-t") {
             use_threads = true;
-            break;
+        } else if (arg == "--save-output" || arg == "-s") {
+            save_output = true;
+        } else {
+            std::cerr << "Unknown argument: " << arg << "\n";
+            std::cerr << "Usage: " << argv[0] << " [--threads | -t] [--save-output | -s]\n";
+            return 1;
         }
     }
 
@@ -138,11 +145,12 @@ int main(int argc, char* argv[]) {
     infile.close();
 
     if (use_threads) {
-        // std::cout << "Solving " << num_boards << " Sudoku boards with parallel threads...\n";
+        std::cout << "Solving " << num_boards << " Sudoku boards with parallel threads...\n";
     } else {
-        // std::cout << "Solving " << num_boards << " Sudoku boards sequentially (no threads)...\n";
+        std::cout << "Solving " << num_boards << " Sudoku boards sequentially (no threads)...\n";
     }
 
+    // Start the timer
     auto start = std::chrono::high_resolution_clock::now();
 
     std::vector<BoardResult> results(num_boards);
@@ -165,12 +173,12 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    // Stop the timer
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> duration = end - start;
 
-    // std::cout << "All Sudoku boards solved.\n";
-    // std::cout << "Time taken to solve all Sudoku boards: " << duration.count() << " seconds\n";
-    std::cout << duration.count() << "\n";
+    // Print the time taken to solve all boards
+    std::cout << "Time taken to solve all Sudoku boards: " << duration.count() << " seconds\n";
 
     // Combine all solutions
     int total_solutions = 0;
@@ -178,35 +186,37 @@ int main(int argc, char* argv[]) {
         total_solutions += res.solution_count;
     }
 
-    // Open the output file
-    std::ofstream outfile("solutions.txt");
-    if (!outfile.is_open()) {
-        std::cerr << "Failed to open solutions.txt for writing.\n";
-        return 1;
-    }
+    if (save_output) {
+        // Open the output file
+        std::ofstream outfile("solutions.txt");
+        if (!outfile.is_open()) {
+            std::cerr << "Failed to open solutions.txt for writing.\n";
+            return 1;
+        }
 
-    // Write the total number of solutions
-    outfile << "Total Solutions Found: " << total_solutions << "\n\n";
+        // Write the total number of solutions
+        outfile << "Total Solutions Found: " << total_solutions << "\n\n";
 
-    int solution_index = 1;
-    for (int b = 0; b < num_boards; ++b) {
-        outfile << "Board " << b + 1 << " Solutions:\n";
-        for (auto &sol : results[b].solutions) {
-            outfile << "Solution " << solution_index++ << ":\n";
-            for (int i = 0; i < SIZE; ++i) {
-                for (int j = 0; j < SIZE; ++j) {
-                    outfile << std::setw(2) << sol[i * SIZE + j] << " ";
+        int solution_index = 1;
+        for (int b = 0; b < num_boards; ++b) {
+            outfile << "Board " << b + 1 << " Solutions:\n";
+            for (auto &sol : results[b].solutions) {
+                outfile << "Solution " << solution_index++ << ":\n";
+                for (int i = 0; i < SIZE; ++i) {
+                    for (int j = 0; j < SIZE; ++j) {
+                        outfile << std::setw(2) << sol[i * SIZE + j] << " ";
+                    }
+                    outfile << "\n";
                 }
                 outfile << "\n";
             }
             outfile << "\n";
         }
-        outfile << "\n";
-    }
 
-    // Close the file
-    outfile.close();
-    // std::cout << "Solutions have been saved to solutions.txt\n";
+        // Close the file
+        outfile.close();
+        std::cout << "Solutions have been saved to solutions.txt\n";
+    }
 
     return 0;
 }

@@ -3,10 +3,11 @@
 #include <vector>
 #include <fstream>
 #include <chrono>
+#include <getopt.h>
 
 #define SIZE 9
 #define NUM_THREADS 256
-#define MAX_BOARDS 10000000 // Adjust as needed
+#define MAX_BOARDS 10000000
 #define MAX_ITERATIONS 1000 // Safety limit to prevent infinite loops
 
 // Device function to check if placing num at (row, col) is valid
@@ -32,8 +33,7 @@ __device__ bool is_valid(int* board, int row, int col, int num) {
     return true;
 }
 
-// Modify the kernel as follows:
-
+// Kernel to solve Sudoku
 __global__ void solve_sudoku_kernel(
     int* current_boards, 
     int* next_boards, 
@@ -43,8 +43,10 @@ __global__ void solve_sudoku_kernel(
     int num_current_boards
 ) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    // If there are no more boards to process, return
     if (idx >= num_current_boards) return;
 
+    // Copy the current board for processing
     int board[SIZE * SIZE];
     for (int i = 0; i < SIZE * SIZE; ++i)
         board[i] = current_boards[idx * SIZE * SIZE + i];
@@ -61,21 +63,22 @@ __global__ void solve_sudoku_kernel(
     // If no empty cell, record solution
     if (empty_pos == -1) {
         int sol_idx = atomicAdd(solution_count, 1);
-        if (sol_idx < MAX_BOARDS) { // Check we don't exceed our solution buffer
+        if (sol_idx < MAX_BOARDS) {
+            // Write the solution
             for (int i = 0; i < SIZE * SIZE; ++i)
                 solutions[sol_idx * SIZE * SIZE + i] = board[i];
         } else {
-            // If we exceed the solution buffer, we might stop or just skip writing
-            // Consider reverting the atomicAdd if desired, but that's tricky
-            // For simplicity, we will just skip writing
+            // If we exceed the solution buffer, skip writing more solutions
         }
         return;
     }
 
+    // Find the row and column of the empty cell
     int row = empty_pos / SIZE;
     int col = empty_pos % SIZE;
     bool any_valid = false;
 
+    // Try placing numbers 1-9 in the empty cell
     for (int num = 1; num <= SIZE; ++num) {
         if (is_valid(board, row, col, num)) {
             any_valid = true;
@@ -86,16 +89,27 @@ __global__ void solve_sudoku_kernel(
                     next_boards[new_board_idx * SIZE * SIZE + i] = board[i];
                 next_boards[new_board_idx * SIZE * SIZE + empty_pos] = num;
             } else {
-                // If we exceed MAX_BOARDS for expansions, we should consider stopping further expansions
-                // One strategy is to just skip creating more boards
-                // Another is to reset next_count back by one atomic operation, but this can be complex
-                // For now, we just skip writing more boards
+                // If we exceed the buffer, skip writing more boards
             }
         }
     }
 }
 
-int main() {
+int main() {        
+    bool save_output = false;
+
+    // Parse arguments
+    for (int i = 1; i < argc; ++i) {
+        std::string arg = argv[i];
+        if (arg == "--save-output" || arg == "-s") {
+            save_output = true;
+        } else {
+            std::cerr << "Unknown argument: " << arg << "\n";
+            std::cerr << "Usage: " << argv[0] << " [--save-output | -s]\n";
+            return 1;
+        }
+    }
+
     // Read boards from a file
     std::string filename = "boards.txt";
     std::ifstream infile(filename);
@@ -112,7 +126,6 @@ int main() {
     }
 
     // Read all boards into a host vector
-    // We'll store all boards consecutively: board0(81 ints), board1(81 ints), ...
     std::vector<int> host_boards(num_boards * SIZE * SIZE);
     for (int b = 0; b < num_boards; ++b) {
         for (int i = 0; i < SIZE; ++i) {
@@ -144,7 +157,7 @@ int main() {
 
     // Allocate memory for solutions on the GPU
     int* d_solutions;
-    cudaMalloc(&d_solutions, sizeof(int) * SIZE * SIZE * MAX_BOARDS); // Adjust size as needed
+    cudaMalloc(&d_solutions, sizeof(int) * SIZE * SIZE * MAX_BOARDS);
 
     // Allocate memory for counts
     int* d_next_count;
@@ -165,8 +178,9 @@ int main() {
     // Define kernel launch parameters
     int threads_per_block = NUM_THREADS;
 
-    int iteration = 0; // Iteration counter
+    int iteration = 0;
 
+    // Start the timer
     auto start_algorithm = std::chrono::high_resolution_clock::now();
 
     // Iterate until all boards are processed or maximum iterations reached
@@ -224,11 +238,10 @@ int main() {
         }
     }
 
+    // Stop the timer
     auto end_algorithm = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> duration_algorithm = end_algorithm - start_algorithm;
-    // std::cout << "Time taken for important algorithm stages: " << duration_algorithm.count() << " seconds\n";
-    std::cout << duration_algorithm.count() << "\n";
-
+    std::chrono::duration<double> duration_algorithm = end_algorithm - start_algorithm;    
+    
     // Get the total number of solutions
     int total_solutions;
     cudaMemcpy(&total_solutions, d_solution_count, sizeof(int), cudaMemcpyDeviceToHost);
@@ -239,37 +252,43 @@ int main() {
         cudaMemcpy(solutions.data(), d_solutions, sizeof(int) * SIZE * SIZE * total_solutions, cudaMemcpyDeviceToHost);
     }
 
-    // Open the output file
-    std::ofstream outfile("solutions.txt");
-    if (!outfile.is_open()) {
-        std::cerr << "Failed to open solutions.txt for writing.\n";
-        // Free memory before exiting
-        cudaFree(d_current_boards);
-        cudaFree(d_next_boards);
-        cudaFree(d_solutions);
-        cudaFree(d_next_count);
-        cudaFree(d_solution_count);
-        return 1;
-    }
+    // Print the total time taken and the total number of solutions
+    std::cout << "Total time taken: " << duration_algorithm.count() << " seconds\n";
+    std::cout << "Total Solutions Found: " << total_solutions << "\n";
 
-    // Write the total number of solutions
-    outfile << "Total Solutions Found: " << total_solutions << "\n\n";
+    if (save_output) {
+        // Open the output file
+        std::ofstream outfile("solutions.txt");
+        if (!outfile.is_open()) {
+            std::cerr << "Failed to open solutions.txt for writing.\n";
+            // Free memory before exiting
+            cudaFree(d_current_boards);
+            cudaFree(d_next_boards);
+            cudaFree(d_solutions);
+            cudaFree(d_next_count);
+            cudaFree(d_solution_count);
+            return 1;
+        }
 
-    // Write each solution to the file
-    for (int s = 0; s < total_solutions; ++s) {
-        outfile << "Solution " << s + 1 << ":\n";
-        for (int i = 0; i < SIZE; ++i) {
-            for (int j = 0; j < SIZE; ++j) {
-                outfile << solutions[s * SIZE * SIZE + i * SIZE + j] << " ";
+        // Write the total number of solutions
+        outfile << "Total Solutions Found: " << total_solutions << "\n\n";
+
+        // Write each solution to the file
+        for (int s = 0; s < total_solutions; ++s) {
+            outfile << "Solution " << s + 1 << ":\n";
+            for (int i = 0; i < SIZE; ++i) {
+                for (int j = 0; j < SIZE; ++j) {
+                    outfile << solutions[s * SIZE * SIZE + i * SIZE + j] << " ";
+                }
+                outfile << "\n";
             }
             outfile << "\n";
         }
-        outfile << "\n";
-    }
 
-    // Close the file
-    outfile.close();
-    // std::cout << "Solutions have been saved to solutions.txt\n";
+        // Close the file
+        outfile.close();
+        std::cout << "Solutions have been saved to solutions.txt\n";
+    }
 
     // Free memory
     cudaFree(d_current_boards);
