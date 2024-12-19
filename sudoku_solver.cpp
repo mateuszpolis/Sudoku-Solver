@@ -177,8 +177,6 @@ int main(int argc, char* argv[]) {
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> duration = end - start;
 
-    // Print the time taken to solve all boards
-    std::cout << "Time taken to solve all Sudoku boards: " << duration.count() << " seconds\n";
 
     // Combine all solutions
     int total_solutions = 0;
@@ -186,6 +184,10 @@ int main(int argc, char* argv[]) {
         total_solutions += res.solution_count;
     }
 
+    // Print the time taken to solve all boards
+    std::cout << "Time taken to solve all Sudoku boards: " << duration.count() << " seconds\n";
+    std::cout << "Total Solutions Found: " << total_solutions << "\n";
+    
     if (save_output) {
         // Open the output file
         std::ofstream outfile("solutions.txt");
