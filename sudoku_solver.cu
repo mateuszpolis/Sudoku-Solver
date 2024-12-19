@@ -76,7 +76,6 @@ __global__ void solve_sudoku_kernel(
     // Find the row and column of the empty cell
     int row = empty_pos / SIZE;
     int col = empty_pos % SIZE;
-    bool any_valid = false;
 
     // Try placing numbers 1-9 in the empty cell
     for (int num = 1; num <= SIZE; ++num) {
@@ -95,7 +94,7 @@ __global__ void solve_sudoku_kernel(
     }
 }
 
-int main() {        
+int main(int argc, char** argv) {        
     bool save_output = false;
 
     // Parse arguments
@@ -109,6 +108,9 @@ int main() {
             return 1;
         }
     }
+
+    // Measure the time taken to read data from file
+    auto start_read = std::chrono::high_resolution_clock::now();
 
     // Read boards from a file
     std::string filename = "boards.txt";
@@ -149,6 +151,14 @@ int main() {
 
     infile.close();
 
+    // Stop the timer
+    auto end_read = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> duration_read = end_read - start_read;
+
+    // Measure the time taken to copy data to the GPU
+
+    auto start_copy = std::chrono::high_resolution_clock::now();
+
     // Allocate memory for current boards and next boards on the GPU
     int* d_current_boards;
     int* d_next_boards;
@@ -171,6 +181,10 @@ int main() {
 
     // Copy all boards to current_boards on device
     cudaMemcpy(d_current_boards, host_boards.data(), sizeof(int) * SIZE * SIZE * num_boards, cudaMemcpyHostToDevice);
+
+    // Stop the timer
+    auto end_copy = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> duration_copy = end_copy - start_copy;
 
     // Initialize the number of current boards to the number of boards we read
     int num_current_boards = num_boards;
@@ -253,7 +267,9 @@ int main() {
     }
 
     // Print the total time taken and the total number of solutions
-    std::cout << "Total time taken: " << duration_algorithm.count() << " seconds\n";
+    std::cout << "Time taken to read data: " << duration_read.count() << " seconds\n";
+    std::cout << "Time taken to copy data to GPU: " << duration_copy.count() << " seconds\n";
+    std::cout << "Time taken to solve the boards: " << duration_algorithm.count() << " seconds\n";
     std::cout << "Total Solutions Found: " << total_solutions << "\n";
 
     if (save_output) {
