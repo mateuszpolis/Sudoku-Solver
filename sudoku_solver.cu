@@ -80,7 +80,6 @@ __global__ void solve_sudoku_kernel(
     // Try placing numbers 1-9 in the empty cell
     for (int num = 1; num <= SIZE; ++num) {
         if (is_valid(board, row, col, num)) {
-            any_valid = true;
             int new_board_idx = atomicAdd(next_count, 1);
             if (new_board_idx < MAX_BOARDS) {
                 // Write the new board
